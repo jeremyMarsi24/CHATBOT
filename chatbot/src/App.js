@@ -25,60 +25,90 @@ export default function App() {
     });
   }, [messages, loading]);
 
-  // 📌 Función que llama a tu backend
+  // Llama a tu backend y lanza Error si el backend responde con ok:false o resp !ok
   const enviarAlBackend = async (textoUsuario) => {
-    
-      const resp = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            { role: "user", content: textoUsuario }
-          ]
-        })
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(`${data.code} ${data.error}`);
-  
+    const resp = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: textoUsuario }]
+      })
+    });
 
-  return data.text || "Sin respuesta";
-     };
+    // Intentar leer siempre el JSON (tanto en éxito como en error)
+    let data = {};
+    try {
+      data = await resp.json();
+    } catch (_) {
+      // si no hay JSON, dejar data vacío y continuar
+    }
+
+    if (!resp.ok || data?.ok === false) {
+      // Construye un mensaje claro (e.g. "429 You exceeded your current quota")
+      const code = data?.code ?? resp.status;
+      const msg = data?.error ?? resp.statusText ?? "Error";
+      throw new Error(`${code} ${msg}`);
+    }
+
+    return data.text || "Sin respuesta";
+  };
 
   const send = async (e) => {
     e?.preventDefault();
     const text = input.trim();
-    if (!text) return;
+    if (!text || loading) return;
 
-    // agrega mensaje del usuario
-    setMessages((m) => [...m, { role: "user", text }]);
     setInput("");
     setLoading(true);
 
-    // obtiene respuesta real del backend
-    const reply = await enviarAlBackend(text);
+    // Índice donde quedará el "Escribiendo..." (placeholder)
+    // Añadimos de una vez el mensaje del usuario y el placeholder del bot.
+    const writingIndex = messages.length + 1;
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", text },
+      { role: "bot", text: "Escribiendo..." }
+    ]);
 
-    // agrega respuesta del bot
-    setMessages((m) => [...m, { role: "bot", text: reply }]);
-    setLoading(false);
+    try {
+      const reply = await enviarAlBackend(text);
+
+      // Reemplaza el "Escribiendo..." por la respuesta real
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[writingIndex] = { role: "bot", text: reply };
+        return updated;
+      });
+    } catch (err) {
+      console.error("❌ Error Api Chatgpt:", err);
+
+      // Reemplaza el "Escribiendo..." por el mensaje de error del backend
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[writingIndex] = {
+          role: "bot",
+          text: `⚠️ Error: ${err.message}`
+        };
+        return updated;
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="chat-wrap">
       <header className="chat-header">
         <div className="chat-title">Chatbot MARSI BIONICS</div>
-        <div className="chat-subtitle">Conectado a API OpenAI vía backend</div>
+        <div className="chat-subtitle">SGC</div>
       </header>
 
       <main className="chat-main" ref={listRef}>
         {messages.map((m, i) => (
           <Message key={i} role={m.role} text={m.text} />
         ))}
-        {loading && (
-          <div className="msg msg-bot">
-            <div className="msg-author">Bot</div>
-            <div className="msg-bubble">Escribiendo...</div>
-          </div>
-        )}
+        {/* Ya no necesitamos renderizar "Escribiendo..." aquí, 
+            porque ahora es un mensaje real en el array */}
       </main>
 
       <form className="chat-inputbar" onSubmit={send}>

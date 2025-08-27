@@ -1,0 +1,10 @@
+git add server/.gitignore
+git commit -m "Ignorar archivo .env"
+
+# Dependencias
+node_modules/
+**/node_modules/
+
+# Entornos
+.env
+**/*.env
