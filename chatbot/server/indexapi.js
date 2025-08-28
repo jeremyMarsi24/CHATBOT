@@ -58,7 +58,7 @@ app.post('/api/chat', async (req, res) => {
 app.post('/api/chat-stream', async (req, res) => {
   try {
     const { messages = [], model } = req.body;
-    const modelToUse = model || 'gpt-4o-mini';
+    const modelToUse = model || 'gpt-5-mini';
     const input = messages.map(m => `${m.role}: ${m.content}`).join('\n');
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
