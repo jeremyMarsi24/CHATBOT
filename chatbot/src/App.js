@@ -10,6 +10,9 @@ function Message({ role, text }) {
   );
 }
 
+const SYSTEM_PROMPT =
+  "Eres un asistente del SGC de MARSI BIONICS. Responde de forma breve, clara y con pasos si procede.";
+
 export default function App() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([
@@ -19,34 +22,40 @@ export default function App() {
   const listRef = useRef(null);
 
   useEffect(() => {
-    listRef.current?.scrollTo({
-      top: listRef.current.scrollHeight,
-      behavior: "smooth"
-    });
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
-  // Llama a tu backend y lanza Error si el backend responde con ok:false o resp !ok
-  const enviarAlBackend = async (textoUsuario) => {
+  /** ⬇️ Utilidad: mapea tu historial UI -> historial LLM (system|user|assistant) */
+  const toLLMMessages = (uiMessages, nextUserText) => {
+    const base = [{ role: "system", content: SYSTEM_PROMPT }];
+
+    const mapped = uiMessages.map(m => ({
+      role: m.role === "bot" ? "assistant" : "user",
+      content: m.text
+    }));
+
+    // añadimos lo que el usuario acaba de escribir
+    if (nextUserText?.trim()) {
+      mapped.push({ role: "user", content: nextUserText.trim() });
+    }
+
+    return [...base, ...mapped];
+  };
+
+  // Llama a tu backend con TODO el historial
+  const enviarAlBackend = async (llmMessages) => {
     const resp = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: [{ role: "user", content: textoUsuario }]
-      })
+      body: JSON.stringify({ messages: llmMessages })
     });
 
-    // Intentar leer siempre el JSON (tanto en éxito como en error)
     let data = {};
-    try {
-      data = await resp.json();
-    } catch (_) {
-      // si no hay JSON, dejar data vacío y continuar
-    }
+    try { data = await resp.json(); } catch (_) {}
 
     if (!resp.ok || data?.ok === false) {
-      // Construye un mensaje claro (e.g. "429 You exceeded your current quota")
       const code = data?.code ?? resp.status;
-      const msg = data?.error ?? resp.statusText ?? "Error";
+      const msg  = data?.error ?? resp.statusText ?? "Error";
       throw new Error(`${code} ${msg}`);
     }
 
@@ -61,34 +70,30 @@ export default function App() {
     setInput("");
     setLoading(true);
 
-    // Índice donde quedará el "Escribiendo..." (placeholder)
-    // Añadimos de una vez el mensaje del usuario y el placeholder del bot.
+    // índice donde quedará el placeholder "Escribiendo..."
     const writingIndex = messages.length + 1;
-    setMessages((prev) => [
+
+    // pintamos ya el mensaje del usuario y el placeholder
+    setMessages(prev => [
       ...prev,
       { role: "user", text },
-      { role: "bot", text: "Escribiendo..." }
+      { role: "bot",  text: "Escribiendo..." }
     ]);
 
     try {
-      const reply = await enviarAlBackend(text);
+      const llmMessages = toLLMMessages(messages, text);
+      const reply = await enviarAlBackend(llmMessages);
 
-      // Reemplaza el "Escribiendo..." por la respuesta real
-      setMessages((prev) => {
+      setMessages(prev => {
         const updated = [...prev];
         updated[writingIndex] = { role: "bot", text: reply };
         return updated;
       });
     } catch (err) {
-      console.error("❌ Error Api Chatgpt:", err);
-
-      // Reemplaza el "Escribiendo..." por el mensaje de error del backend
-      setMessages((prev) => {
+      console.error("❌ Error Api Chat:", err);
+      setMessages(prev => {
         const updated = [...prev];
-        updated[writingIndex] = {
-          role: "bot",
-          text: `⚠️ Error: ${err.message}`
-        };
+        updated[writingIndex] = { role: "bot", text: `⚠️ Error: ${err.message}` };
         return updated;
       });
     } finally {
@@ -104,11 +109,7 @@ export default function App() {
       </header>
 
       <main className="chat-main" ref={listRef}>
-        {messages.map((m, i) => (
-          <Message key={i} role={m.role} text={m.text} />
-        ))}
-        {/* Ya no necesitamos renderizar "Escribiendo..." aquí, 
-            porque ahora es un mensaje real en el array */}
+        {messages.map((m, i) => <Message key={i} role={m.role} text={m.text} />)}
       </main>
 
       <form className="chat-inputbar" onSubmit={send}>
@@ -117,9 +118,7 @@ export default function App() {
           placeholder="Escribe tu mensaje…"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) send(e);
-          }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) send(e); }}
           autoFocus
         />
         <button className="chat-send" type="submit" disabled={!input.trim() || loading}>
