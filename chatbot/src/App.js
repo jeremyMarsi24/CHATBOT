@@ -16,7 +16,7 @@ const SYSTEM_PROMPT =
 export default function App() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([
-    { role: "bot", text: "Hola, soy un bot. Pregúntame algo." }
+    { role: "bot", text: "Hola, soy Marsianito tu bot de confianza. Pregúntame algo." }
   ]);
   const [loading, setLoading] = useState(false);
   const listRef = useRef(null);

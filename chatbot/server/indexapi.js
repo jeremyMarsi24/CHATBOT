@@ -8,24 +8,24 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
 
-// --- OpenAI client ---
+// usar el modelo
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// --- Healthcheck ---
+// --- Revisar salud del server---
 app.get('/health', (_req, res) => res.send('ok'));
 
 // --- Chat (JSON) ---
 app.post('/api/chat', async (req, res) => {
   try {
     const { messages = [], model } = req.body;
-    const modelToUse = model || 'gpt-4o-mini'; // ajusta al que quieras usar
+    const modelToUse = model || 'gpt-5-mini'; 
 
-    // Combina mensajes a texto simple (puedes cambiar al formato messages[] si prefieres)
+    
     const input = messages.map(m => `${m.role}: ${m.content}`).join('\n');
 
     const result = await client.responses.create({ model: modelToUse, input });
 
-    // ⚠️ No mezclar ?? y ||: encadenamos solo con ?? (nullish)
+ 
     const text =
       result.output_text ??
       result.output?.[0]?.content?.[0]?.text ??
@@ -35,7 +35,7 @@ app.post('/api/chat', async (req, res) => {
   } catch (err) {
     console.error('ERROR /api/chat:', err);
 
-    // Intenta deducir un status útil (e.g., 429 cuota excedida)
+    // error de cuota 429
     const status =
       err?.status ||
       err?.response?.status ||
@@ -54,7 +54,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// --- Chat Streaming (SSE) opcional en RUTA DIFERENTE ---
+// CHAT SSE 
 app.post('/api/chat-stream', async (req, res) => {
   try {
     const { messages = [], model } = req.body;
@@ -95,7 +95,7 @@ app.post('/api/chat-stream', async (req, res) => {
   }
 });
 
-// --- Puerto ---
+// --- Puertos y endpoints  ---
 const PORT = Number(process.env.PORT) || 3001;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ API en http://localhost:${PORT}`);
